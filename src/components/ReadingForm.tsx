@@ -10,11 +10,14 @@ type Props = {
   medium: MediumId
   model: ModelId
   busy: boolean
+  canExport: boolean
+  exporting: boolean
   onQuestion: (value: string) => void
   onSpread: (value: SpreadId) => void
   onMedium: (value: MediumId) => void
   onModel: (value: ModelId) => void
   onSubmit: (event: FormEvent) => void
+  onExport: () => void
 }
 
 export function ReadingForm({
@@ -23,11 +26,14 @@ export function ReadingForm({
   medium,
   model,
   busy,
+  canExport,
+  exporting,
   onQuestion,
   onSpread,
   onMedium,
   onModel,
   onSubmit,
+  onExport,
 }: Props) {
   return (
     <form className="reading-form" onSubmit={onSubmit}>
@@ -90,9 +96,19 @@ export function ReadingForm({
         <em>{MODELS.find((item) => item.id === model)?.description}</em>
       </label>
 
-      <button type="submit" disabled={busy || !question.trim()}>
-        {busy ? 'Reading…' : 'Draw the spread'}
-      </button>
+      <div className="form-actions">
+        <button type="submit" disabled={busy || !question.trim()}>
+          {busy ? 'Reading…' : 'Draw the spread'}
+        </button>
+        {canExport && (
+          <button type="button" className="export-button" onClick={onExport} disabled={exporting}>
+            {exporting ? 'Saving zip…' : 'Export standalone HTML'}
+          </button>
+        )}
+      </div>
+      {canExport && (
+        <em className="export-hint">Downloads a zip with reading.html and local copies of the images.</em>
+      )}
     </form>
   )
 }

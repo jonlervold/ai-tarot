@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { ArtworkCard } from './components/ArtworkCard'
 import { CardGrid } from './components/CardGrid'
 import { Interpretation } from './components/Interpretation'
@@ -20,6 +20,16 @@ export default function App() {
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState('')
   const [asked, setAsked] = useState('')
+  const [askedSpread, setAskedSpread] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
+
+  useEffect(() => {
+    if (status !== 'interpreting') return
+    if (!interpretation.includes('<<<SUMMARY>>>')) return
+    const timer = window.setTimeout(() => setStatus('done'), 8000)
+    return () => window.clearTimeout(timer)
+  }, [status, interpretation])
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -31,6 +41,8 @@ export default function App() {
     setCards([])
     setInterpretation('')
     setAsked(trimmed)
+    setAskedSpread(SPREADS[spreadId].label)
+    setExportError('')
 
     try {
       const response = await fetch('/api/reading', {
@@ -69,6 +81,8 @@ export default function App() {
             setStatus('interpreting')
           } else if (event.type === 'token') {
             setInterpretation((current) => current + event.text)
+          } else if (event.type === 'done') {
+            setStatus('done')
           } else if (event.type === 'error') {
             throw new Error(event.message)
           }
@@ -81,21 +95,62 @@ export default function App() {
         if (event.type === 'token') {
           setInterpretation((current) => current + event.text)
         }
+        if (event.type === 'done') setStatus('done')
       }
 
-      setStatus('done')
+      setStatus((current) => (current === 'error' ? current : 'done'))
     } catch (caught) {
       setStatus('error')
       setError(caught instanceof Error ? caught.message : 'Something went wrong')
     }
   }
 
+  async function onExport() {
+    if (exporting || cards.length === 0) return
+    setExporting(true)
+    setExportError('')
+    try {
+      const response = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: asked,
+          spreadLabel: askedSpread,
+          cards,
+          cardTexts: parsed.cardTexts,
+          summary: parsed.summary,
+        }),
+      })
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error || `Export failed (${response.status})`)
+      }
+      const blob = await response.blob()
+      const header = response.headers.get('Content-Disposition')
+      const match = header?.match(/filename="([^"]+)"/)
+      const filename = match?.[1] || 'museum-tarot-reading.zip'
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.append(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught.message : 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const busy = status === 'drawing' || status === 'interpreting'
   const spread = SPREADS[spreadId]
-  const parsed = parseReadingStream(interpretation, cards.length, status === 'done')
+  const parsed = parseReadingStream(interpretation, cards.length, status === 'done' || status === 'error')
   const showSummary =
     Boolean(parsed.summary) ||
     (status === 'interpreting' && parsed.streamingTarget?.type === 'summary')
+  const canExport = cards.length > 0 && status !== 'drawing'
 
   return (
     <div className="page">
@@ -114,11 +169,14 @@ export default function App() {
         medium={medium}
         model={model}
         busy={busy}
+        canExport={canExport}
+        exporting={exporting}
         onQuestion={setQuestion}
         onSpread={setSpreadId}
         onMedium={setMedium}
         onModel={setModel}
         onSubmit={onSubmit}
+        onExport={onExport}
       />
 
       {status === 'drawing' && (
@@ -158,6 +216,12 @@ export default function App() {
           text={parsed.summary}
           streaming={status === 'interpreting' && parsed.streamingTarget?.type === 'summary'}
         />
+      )}
+
+      {exportError && (
+        <p className="error" role="alert">
+          {exportError}
+        </p>
       )}
 
       {error && (

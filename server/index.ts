@@ -8,6 +8,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { drawArtworks } from './cleveland.ts'
+import { buildReadingZip, type ExportRequest } from './export.ts'
 import { interpretReading } from './interpret.ts'
 import { getSpread } from '../src/lib/spreads.ts'
 import { isModelId } from '../src/lib/models.ts'
@@ -100,6 +101,36 @@ app.post('/api/reading', async (c) => {
       'Cache-Control': 'no-cache',
     },
   })
+})
+
+app.post('/api/export', async (c) => {
+  let body: ExportRequest
+  try {
+    body = (await c.req.json()) as ExportRequest
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  if (!body.question?.trim() || !Array.isArray(body.cards) || body.cards.length === 0) {
+    return c.json({ error: 'A completed reading is required to export' }, 400)
+  }
+
+  try {
+    const { zip, filename } = await buildReadingZip({
+      question: body.question.trim(),
+      spreadLabel: body.spreadLabel?.trim() || 'Reading',
+      cards: body.cards,
+      cardTexts: Array.isArray(body.cardTexts) ? body.cardTexts : [],
+      summary: body.summary ?? '',
+    })
+    return c.body(zip, 200, {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Export failed'
+    return c.json({ error: message }, 500)
+  }
 })
 
 if (existsSync(distDir)) {

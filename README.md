@@ -35,4 +35,4 @@ npm start
 docker compose up --build
 ```
 
-The app will be available at `http://localhost:3000`. Make sure `.env` exists first (`docker-compose.yml` loads it via `env_file`).
+The app will be available at `http://localhost:3000` (or whatever `PORT` is set to in `.env`). Make sure `.env` exists first (`docker-compose.yml` loads it via `env_file` and publishes that same port).

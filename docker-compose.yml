@@ -2,7 +2,7 @@ services:
   tarot:
     build: .
     ports:
-      - '${PORT:-3000}:${PORT:-3000}'
+      - '${PORT:-13000}:${PORT:-13000}'
     env_file:
       - .env
     environment:
